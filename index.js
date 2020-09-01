@@ -1,69 +1,77 @@
-const express = require('express');
-const socketio = require('socket.io');
-const http = require('http');
-const path = require('path');
-const cors = require('cors');
+const express = require("express");
+const socketio = require("socket.io");
+const http = require("http");
+const path = require("path");
+const cors = require("cors");
 
-const router = require('./router');
-const { addUser, removeUser, getUser, getUsersInRoom } = require('./manageUsers');
+const router = require("./router");
+const {
+  addUser,
+  removeUser,
+  getUser,
+  getUsersInRoom,
+} = require("./manageUsers");
 
 const server = express();
 const app = http.createServer(server);
 const io = socketio(app);
 
-
 const PORT = process.env.PORT || 4000;
-
 
 server.use(cors());
 
 server.use(router);
 
+io.on("connection", (socket) => {
+  console.log(`new Client has been joined`);
 
-io.on('connection', (socket) => {
+  socket.on("client-join", ({ name, room }, callback) => {
+    globalName = name; // why it does not work
 
-    console.log(`new Client has been joined`);
+    const { error, user } = addUser({ id: socket.id, name, room });
 
+    if (error) return callback(error);
 
-
-    socket.on('client-join', ({ name, room }, callback) => {
-        globalName = name;// why it does not work
-
-        const { error, user } = addUser({ id: socket.id, name, room });
-
-        if (error) return callback(error);
-
-        socket.emit('message', { user: 'Admin', mesg: ` ${user.name}, welcome to my chat on room ${user.room} ` });
-
-        socket.broadcast.to(user.room).emit('message', { user: 'Admin', mesg: `${user.name}, new user had joind us` });
-
-        socket.join(user.room);
-
-        io.to(user.room).emit('roomOnlineUsers', { users: getUsersInRoom(user.room) })
-
-
-        callback();
-
+    // display welcome message to the new user
+    socket.emit("message", {
+      user: "Admin",
+      mesg: ` ${user.name}, welcome to my chat on room ${user.room} `,
     });
 
-
-    socket.on('sendMessage', (mesg, callback) => {
-
-        const user = getUser(socket.id);
-
-        io.to(user.room).emit('message', { user: user.name, mesg })
-        callback();
+    socket.broadcast.to(user.room).emit("message", {
+      user: "Admin",
+      mesg: `${user.name}, new user had joined us`,
     });
 
-    socket.on('disconnect', () => {
+    socket.join(user.room);
 
-        const removedUser = removeUser(socket.id);
+    io.to(user.room).emit("roomOnlineUsers", {
+      users: getUsersInRoom(user.room),
+    });
 
-        io.to(removedUser.room).emit('message', { user: 'admin', mesg: `${removedUser.name} has left .` });
-        io.to(removedUser.room).emit('roomData', { users: getUsersInRoom(removedUser.room) });
-    })
-})
+    callback();
+  });
+
+  socket.on("sendMessage", (message, callback) => {
+    const user = getUser(socket.id);
+    console.log("message: " + message);
+    io.to(user.room).emit("message", { user: user.name, mesg: message });
+    callback();
+  });
+
+  socket.on("disconnect", () => {
+    const removedUser = removeUser(socket.id);
+
+    io.to(removedUser.room).emit("message", {
+      user: "admin",
+      mesg: `${removedUser.name} has left .`,
+    });
+    io.to(removedUser.room).emit("roomData", {
+      users: getUsersInRoom(removedUser.room),
+    });
+  });
+});
 
 app.listen(PORT, () => {
-    console.log(`server is up on ${PORT} `);
-})
+  console.log(`server is up on ${PORT} `);
+});
